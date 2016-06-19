@@ -36,21 +36,23 @@
        (custodian-shutdown-all main-custodian)
        (raise-user-error 'connect
                          (if (eq? auth-result 'bad-password)
-                             txt:bad-password
+                             (txt:bad-password)
                              auth-result))])
-    (define receivers (list (cons #f on-event)))
+    (define receivers (list (cons #f (thread-loop (on-event (thread-receive))))))
     (define (receive! receivers id data [seen null])
       (define r (car receivers))
-      (if (eqv? (car r) id)
-          (begin
-            (thread-send (cdr r) data)
-            (set! receivers (append (reverse seen) receivers)))
-          (receive! (cdr receivers) (cons r seen))))
+      (cond
+        [(eqv? (car r) id)
+         (thread-send (cdr r) data)
+         (set! receivers (append (reverse seen) receivers))]
+        [(eq? (car r) #f)
+         (thread-send (cdr r) data)]
+        [else (receive! (cdr receivers) id data (cons r seen))]))
     (define dispatch (thread (λ ()
                                (let loop ()
                                  (match (thread-receive)
                                    [(list-rest 'data id data) (receive! receivers id data)]
-                                   [(cons id return) (set! receivers (cons (cons id return) receivers))])
+                                   [new-receiver (set! receivers (cons new-receiver receivers))])
                                  (loop)))))
     (define next!
       (let ([n 0])
@@ -60,17 +62,18 @@
     (define sender (thread-loop
                     (match (thread-receive)
                       [(cons return data)
-                       (write/flush data out)
-                       (thread-send dispatch (cons (next!) return))]
+                       (define id (next!))
+                       (thread-send dispatch (cons id return) #f)
+                       (write/flush (cons id data) out)]
                       [data (write/flush data out)])))
     (thread-loop
      (define data (read/timeout in))
      (if (eof-object? data)
          (custodian-shutdown-all main-custodian)
-         (thread-send dispatch (cons 'data data))))
+         (thread-send dispatch (cons 'data data) #f)))
     (thread-loop
      (sleep 10)
-     (thread-send sender 'keepalive))
+     (thread-send sender 'keepalive #f))
     (set-connection-send-thread! result-connection sender)
     (set-connection-close! result-connection (λ ()
                                                (custodian-shutdown-all main-custodian)))
