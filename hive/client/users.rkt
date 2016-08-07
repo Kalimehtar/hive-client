@@ -13,9 +13,7 @@
 
 (define (users-form connection parent)
   (when connection
-    (displayln "Users: start")
     (define users (users-list connection))
-    (displayln "Users got")
     (define users-form (new horizontal-pane% [parent parent]))
     (define list-box (new list-box% 
                           [label "Users"]

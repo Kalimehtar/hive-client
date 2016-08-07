@@ -68,9 +68,11 @@
                       [data (write/flush data out)])))
     (thread-loop
      (define data (read/timeout in))
-     (if (eof-object? data)
-         (custodian-shutdown-all main-custodian)
-         (thread-send dispatch (cons 'data data) #f)))
+     (cond
+       [(eof-object? data)
+        (thread-send reconnect #t)
+        (custodian-shutdown-all main-custodian)]
+       [else (thread-send dispatch (cons 'data data) #f)]))
     (thread-loop
      (sleep 10)
      (thread-send sender 'keepalive #f))
