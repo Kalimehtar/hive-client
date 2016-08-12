@@ -33,11 +33,14 @@
     (case auth-result
       [(ok) #t]
       [else
+       (unless (eq? auth-result 'bad-password)
+         (thread-send reconnect #t))
        (custodian-shutdown-all main-custodian)
-       (raise-user-error 'connect
-                         (if (eq? auth-result 'bad-password)
-                             (txt:bad-password)
-                             auth-result))])
+       (when auth-result
+         (raise-user-error 'connect
+                           (if (eq? auth-result 'bad-password)
+                               (txt:bad-password)
+                               auth-result))]))
     (define receivers (list (cons #f (thread-loop (on-event (thread-receive))))))
     (define (receive! receivers id data [seen null])
       (define r (car receivers))
