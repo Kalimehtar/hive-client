@@ -40,7 +40,7 @@
          (raise-user-error 'connect
                            (if (eq? auth-result 'bad-password)
                                (txt:bad-password)
-                               auth-result))]))
+                               auth-result)))])
     (define receivers (list (cons #f (thread-loop (on-event (thread-receive))))))
     (define (receive! receivers id data [seen null])
       (define r (car receivers))
