@@ -17,7 +17,7 @@
 
 (define (connect tcp-port
                  on-event
-                 on-reconnect
+                 on-connect
                  [username (get-preference 'username)]
                  [password (get-preference 'password)]
                  [result-connection (connection #f #f)])
@@ -25,7 +25,7 @@
   (define reconnect
     (thread (λ ()
               (thread-receive)              
-              (on-reconnect (connect tcp-port on-event username password result-connection)))))
+              (connect tcp-port on-event username password result-connection))))
   (parameterize ([current-custodian main-custodian])
     (define-values (in out) (tcp-connect (get-preference 'server) tcp-port))
     (write/flush (list username password) out)
@@ -42,33 +42,36 @@
                                (txt:bad-password)
                                auth-result)))])
     (define receivers (list (cons #f (thread-loop (on-event (thread-receive))))))
-    (define (receive! receivers id data [seen null])
-      (define r (car receivers))
+    (define (receive! %receivers id data [seen null])
+      (define r (car %receivers))
       (cond
         [(eqv? (car r) id)
          (thread-send (cdr r) data)
-         (set! receivers (append (reverse seen) receivers))]
+         (set! receivers (append (reverse seen) %receivers))]
         [(eq? (car r) #f)
          (thread-send (cdr r) data)]
-        [else (receive! (cdr receivers) id data (cons r seen))]))
-    (define dispatch (thread (λ ()
-                               (let loop ()
-                                 (match (thread-receive)
-                                   [(list-rest 'data id data) (receive! receivers id data)]
-                                   [new-receiver (set! receivers (cons new-receiver receivers))])
-                                 (loop)))))
+        [else (receive! (cdr %receivers) id data (cons r seen))]))
+    (define dispatch (thread-loop
+                      (match (thread-receive)
+                        [(list-rest 'data id data) (receive! receivers id data)]
+                        [new-receiver (set! receivers (cons new-receiver receivers))])))
     (define next!
       (let ([n 0])
         (λ ()
           (set! n (if (n . > . 10000)  0 (add1 n)))
           n)))
     (define sender (thread-loop
+                    (define (write-or-die data out)
+                      (with-handlers ([(λ (e) #t) (λ (e)
+                                                    (thread-send reconnect #t)
+                                                    (custodian-shutdown-all main-custodian))])
+                        (write/flush data out)))
                     (match (thread-receive)
                       [(cons return data)
                        (define id (next!))
                        (thread-send dispatch (cons id return) #f)
-                       (write/flush (cons id data) out)]
-                      [data (write/flush data out)])))
+                       (write-or-die (cons id data) out)]
+                      [data (write-or-die data out)])))
     (thread-loop
      (define data (read/timeout in))
      (cond
@@ -82,13 +85,15 @@
     (set-connection-send-thread! result-connection sender)
     (set-connection-close! result-connection (λ ()
                                                (custodian-shutdown-all main-custodian)))
+    (on-connect result-connection)
     result-connection))
-      
+
 (define (talk connection data)
-  (call-in-nested-thread
-   (λ ()
-     (thread-send (connection-send-thread connection) (cons (current-thread) data))
-     (thread-receive))))
+  (when connection
+    (call-in-nested-thread
+     (λ ()
+       (thread-send (connection-send-thread connection) (cons (current-thread) data))
+       (thread-receive)))))
 
 (define (do-command connection id . args)
   (talk connection (list* 'command id args)))

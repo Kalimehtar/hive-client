@@ -19,7 +19,7 @@
     (init-field
      [port 1313]
      [on-event (λ (data) #t)]
-     [on-reconnect (λ (the-connection) #t)])
+     [on-connect (λ (the-connection) #t)])
     (super-new [label program-name] [width width] [height height])
 
     (inherit create-status-line set-status-text show)
@@ -33,19 +33,21 @@
     
     (define the-connection #f)
     
-    (define/public (set-on-event! new-on-event) (set! on-event new-on-event))
     (define/public (connection)
       (unless (connection-alive? the-connection)
         (with-handlers ([exn:fail:network? (λ (e)
-                                             (message-box "Error"
-                                                          "Cannot connect. Check settings."
+                                             (message-box (txt:error)
+                                                          (txt:cannot-connect)
                                                           this
                                                           '(ok caution))                                             
-                                             (send frame-settings show #t))])
+                                             (send frame-settings show #t))]
+                        [exn:fail:user? (λ (e)
+                                          (message-box (txt:error) (exn-message e) this '(ok caution))
+                                          (send frame-settings show #t))])
           (set! the-connection
                 (if user/pass
-                    (connect port on-event on-reconnect (car user/pass) (cdr user/pass))
-                    (connect port on-event on-reconnect)))))
+                    (connect port on-event on-connect (car user/pass) (cdr user/pass))
+                    (connect port on-event on-connect)))))
       the-connection)
     (define/public (disconnect)
       (when the-connection
@@ -55,8 +57,6 @@
       (disconnect)
       (inner (void) on-close))
     (define menu-bar (new menu-bar% [parent this]))
-    #;(define main-panel (new tab-panel%
-                            [choices '("")] [parent this]))
     (define settings-menu (new menu% [parent menu-bar] [label (txt:settings)]))
     (define settings-menu-item (new menu-item% 
                                     [parent settings-menu] 
@@ -66,13 +66,14 @@
     (define users-menu-item (new menu-item% 
                                  [parent settings-menu] 
                                  [label (txt:users)] 
-                                 [callback (λ (m e) 
-                                             (define f (new frame%
-                                                            [label "Users"]
-                                                            [width width]
-                                                            [height height]))
-                                             (users-form (connection) f)
-                                             (send f show #t))]))
+                                 [callback (λ (m e)
+                                             (when (connection)
+                                               (define f (new frame%
+                                                              [label "Users"]
+                                                              [width width]
+                                                              [height height]))
+                                               (users-form (connection) f)
+                                               (send f show #t)))]))
     
     (create-status-line)
     (set-status-text init-status)

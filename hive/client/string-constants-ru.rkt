@@ -11,3 +11,5 @@
 (define password "Пароль")
 (define save "Записать")
 (define messages "Сообщения")
+(define error "Ошибка")
+(define cannot-connect "Не могу соединиться. Проверьте настройки.")

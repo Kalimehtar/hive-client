@@ -3,31 +3,27 @@
          (only-in hive/client/string-constants-en)
          (only-in hive/client/string-constants-ru)
          (for-syntax racket/base))
-(provide (all-defined-out))
 
 (define (module) (string->symbol (format "hive/client/string-constants-~a" (language))))
 
-(define-for-syntax (check-name name-stx stx)
-  (define datum (syntax->datum name-stx))
-  (unless (symbol? datum)
-    (raise-syntax-error #f (format "expected name, got: ~s" datum) stx))
-  (with-handlers ([exn:fail:contract?
-                   (λ (t)
-                     (raise-syntax-error #f
-                                         (format "~a is not a known string constant" datum)
-                                         stx))])
-    (dynamic-require 'hive/client/string-constants-en datum)))
+;; Get all provided names from hive/client/string-constants-en
+(define-for-syntax (names)
+  (map car
+       (cdr (assv 0 (call-with-values (λ () (module->exports 'hive/client/string-constants-en))
+                                      (λ (x _) x))))))
 
+;; Try to get `name` from (module). If fail, then from hive/client/string-constants-en
 (define-syntax (reexport stx)
   (syntax-case stx ()
-    [(reexport name ...)
-     (for ([name (in-list (syntax->list #'(name ...)))])
-       (check-name name stx))
-     #'(begin    
-         (define (name)
-           (with-handlers ([exn:fail:contract?
-                            (λ (t)
-                              (dynamic-require 'hive/client/string-constants-en 'name))])
-             (dynamic-require (module) 'name))) ...)]))
+    [(reexport)
+     (with-syntax ([(name ...) (datum->syntax stx (names))])
+       #'(begin
+           (begin
+             (provide name)
+             (define (name)
+               (with-handlers ([exn:fail:contract?
+                                (λ (t)
+                                  (dynamic-require 'hive/client/string-constants-en 'name))])
+                 (dynamic-require (module) 'name)))) ...))]))
 
-(reexport bad-password settings users server username password save messages)
+(reexport)

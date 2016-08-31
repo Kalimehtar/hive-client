@@ -11,3 +11,5 @@
 (define password "Password")
 (define save "Save")
 (define messages "Messages")
+(define error "Error")
+(define cannot-connect "Cannot connect. Check settings.")
