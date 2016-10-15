@@ -35,19 +35,21 @@
     
     (define/public (connection)
       (unless (connection-alive? the-connection)
-        (with-handlers ([exn:fail:network? (λ (e)
-                                             (message-box (txt:error)
-                                                          (txt:cannot-connect)
-                                                          this
-                                                          '(ok caution))                                             
-                                             (send frame-settings show #t))]
-                        [exn:fail:user? (λ (e)
-                                          (message-box (txt:error) (exn-message e) this '(ok caution))
-                                          (send frame-settings show #t))])
-          (set! the-connection
-                (if user/pass
-                    (connect port on-event on-connect (car user/pass) (cdr user/pass))
-                    (connect port on-event on-connect)))))
+        (define (on-fail e)
+          (cond
+            [(exn:fail:network? e) (λ (e)
+                                     (message-box (txt:error)
+                                                  (format "~a: ~a" (txt:cannot-connect) (exn-message e))
+                                                  this
+                                                  '(ok caution))
+                                     (send frame-settings show #t))]
+            [(exn:fail:user? e) (λ (e)
+                                  (message-box (txt:error) (exn-message e) this '(ok caution))
+                                  (send frame-settings show #t))]))
+        (set! the-connection
+              (if user/pass
+                  (connect port on-event on-connect on-fail (car user/pass) (cdr user/pass))
+                  (connect port on-event on-connect on-fail))))
       the-connection)
     (define/public (disconnect)
       (when the-connection
