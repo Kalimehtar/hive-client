@@ -10,6 +10,8 @@
 
 (struct exn:bad-password exn:fail:user ())
 
+(struct receiver (id thread data))
+
 (define (connect tcp-port
                  on-event
                  on-connect
@@ -26,16 +28,19 @@
                 [(exn:bad-password? e) (on-fail e)]
                 [else
                  (on-fail e)
-                 (connect tcp-port on-event on-connect on-fail username password result-connection)]))))
+                 (connect tcp-port on-event on-connect on-fail username password result-connection)
+                 (for ([r (in-list receivers)])
+                   (thread-send (connection-send-thread connection)
+                                (cons (receiver-id r) (receiver-data r))))]))))
   (define main-custodian (make-custodian))
   (define-syntax-rule (thread-loop BODY ...)
     (thread
      (λ ()
-       (with-handlers ([exn:fail?  (λ (e)
-                                     (thread-send reconnect e))])
+       (with-handlers ([exn:fail?  (λ (e) (thread-send reconnect e))])
          (let loop ()
            BODY ...
            (loop))))))
+  (define receivers (list (cons #f (thread-loop (on-event (thread-receive))))))
   (parameterize ([current-custodian main-custodian])
     (with-handlers ([exn:fail? (λ (e)
                                  (thread-send reconnect e)
@@ -50,16 +55,15 @@
         [else
          (raise-user-error 'connect
                            auth-result)])
-      (define receivers (list (cons #f (thread-loop (on-event (thread-receive))))))
       (define (receive! %receivers id data [seen null])
-        (define r (car %receivers))
+        (match-define (cons head rest) %receivers)
         (cond
-          [(eqv? (car r) id)
-           (thread-send (cdr r) data)
-           (set! receivers (append (reverse seen) %receivers))]
-          [(eq? (car r) #f)
-         (thread-send (cdr r) data)]
-          [else (receive! (cdr %receivers) id data (cons r seen))]))
+          [(eqv? (receiver-id head) id)
+           (thread-send (receiver-thread head) data)
+           (set! receivers (append (reverse seen) rest))]
+          [(eq? (receiver-id head) #f)
+           (thread-send (receiver-thread head) data)]
+          [else (receive! rest id data (cons head seen))]))
       (define dispatch (thread-loop
                         (match (thread-receive)
                           [(list-rest 'data id data) (receive! receivers id data)]
@@ -70,17 +74,12 @@
             (set! n (if (n . > . 10000)  0 (add1 n)))
             n)))
       (define sender (thread-loop
-                      (define (write-or-die data out)
-                        (with-handlers ([(λ (e) #t) (λ (e)
-                                                      (thread-send reconnect #t)
-                                                      (custodian-shutdown-all main-custodian))])
-                          (write/flush data out)))
                       (match (thread-receive)
                         [(cons return data)
                          (define id (next!))
-                         (thread-send dispatch (cons id return) #f)
-                         (write-or-die (cons id data) out)]
-                        [data (write-or-die data out)])))
+                         (thread-send dispatch (receiver id return data) #f)
+                         (write/flush (cons id data) out)]
+                        [data (write/flush data out)])))
       (thread-loop
        (define data (read/timeout in))
        (cond
