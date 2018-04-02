@@ -10,7 +10,7 @@
 
 (struct exn:bad-password exn:fail:user ())
 
-(struct receiver (id thread data))
+(struct receiver (id thread data) #:transparent)
 
 (define (connect tcp-port
                  on-event
@@ -56,14 +56,15 @@
          (raise-user-error 'connect
                            auth-result)])
       (define (receive! %receivers id data [seen null])
-        (match-define (cons head rest) %receivers)
-        (cond
-          [(eqv? (receiver-id head) id)
-           (thread-send (receiver-thread head) data)
-           (set! receivers (append (reverse seen) rest))]
-          [(eq? (receiver-id head) #f)
-           (thread-send (receiver-thread head) data)]
-          [else (receive! rest id data (cons head seen))]))
+        (match %receivers
+          [(cons head rest)
+           (cond
+             [(eq? (receiver-id head) #f)
+              (thread-send (receiver-thread head) data)]
+             [(eqv? (receiver-id head) id)
+              (thread-send (receiver-thread head) data)
+              (set! receivers (append (reverse seen) rest))]
+             [else (receive! rest id data (cons head seen))])]))
       (define dispatch (thread-loop
                         (match (thread-receive)
                           [(list-rest 'data id data) (receive! receivers id data)]
