@@ -30,8 +30,8 @@
                  (on-fail e)
                  (connect tcp-port on-event on-connect on-fail username password result-connection)
                  (for ([r (in-list receivers)])
-                   (thread-send (connection-send-thread connection)
-                                (cons (receiver-id r) (receiver-data r))))]))))
+                   (when (receiver-data r)
+                     (thread-send (connection-send-thread result-connection) r)))]))))
   (define main-custodian (make-custodian))
   (define-syntax-rule (thread-loop BODY ...)
     (thread
@@ -40,7 +40,7 @@
          (let loop ()
            BODY ...
            (loop))))))
-  (define receivers (list (cons #f (thread-loop (on-event (thread-receive))))))
+  (define receivers (list (receiver #f (thread-loop (on-event (thread-receive))) #f)))
   (parameterize ([current-custodian main-custodian])
     (with-handlers ([exn:fail? (λ (e)
                                  (thread-send reconnect e)
@@ -67,6 +67,7 @@
       (define dispatch (thread-loop
                         (match (thread-receive)
                           [(list-rest 'data id data) (receive! receivers id data)]
+                          [(cons 'data _) #f]
                           [new-receiver (set! receivers (cons new-receiver receivers))])))
       (define next!
         (let ([n 0])
@@ -75,8 +76,8 @@
             n)))
       (define sender (thread-loop
                       (match (thread-receive)
-                        [(cons return data)
-                         (define id (next!))
+                        [(receiver _id return data)
+                         (define id (or _id (next!)))
                          (thread-send dispatch (receiver id return data) #f)
                          (write/flush (cons id data) out)]
                         [data (write/flush data out)])))
@@ -91,8 +92,7 @@
        (sleep 10)
        (thread-send sender 'keepalive #f))
       (set-connection-send-thread! result-connection sender)
-      (set-connection-close! result-connection (λ ()
-                                                 (custodian-shutdown-all main-custodian)))
+      (set-connection-close! result-connection (λ () (custodian-shutdown-all main-custodian)))
       (on-connect result-connection)
       result-connection)))
 
@@ -100,8 +100,9 @@
   (when connection
     (call-in-nested-thread
      (λ ()
-       (thread-send (connection-send-thread connection) (cons (current-thread) data))
-       (thread-receive)))))
+       (with-handlers ([exn:fail? displayln])
+       (thread-send (connection-send-thread connection) (receiver #f (current-thread) data))
+       (thread-receive))))))
 
 (define (do-command connection id . args)
   (talk connection (list* 'command id args)))
@@ -110,7 +111,10 @@
   (talk connection (list* 'std-command id args)))
 
 (define (connection-alive? connection)
-  (and connection (thread-running? (connection-send-thread connection))))
+  (and connection
+       (connection-send-thread connection)
+       (thread-running? (connection-send-thread connection))))
 
 (define (disconnect connection)
-  ((connection-close connection)))
+  (and (connection-close connection)
+       (connection-close connection)))

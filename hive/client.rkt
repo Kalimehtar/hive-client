@@ -69,7 +69,7 @@
                                  [parent settings-menu] 
                                  [label (txt:users)] 
                                  [callback (λ (m e)
-                                             (when (connection)
+                                             (when (connection-alive? (connection))
                                                (define f (new frame%
                                                               [label "Users"]
                                                               [width width]
