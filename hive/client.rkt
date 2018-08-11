@@ -80,8 +80,6 @@
     (create-status-line)
     (set-status-text init-status)
 
-    (show #t)
-
     (define frame-settings 
       (let* ([dialog (new dialog% [label (txt:settings)] [parent this])]
              [server (new text-field%
