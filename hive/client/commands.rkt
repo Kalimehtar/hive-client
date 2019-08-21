@@ -23,6 +23,7 @@
     (thread (λ ()
               (define e (thread-receive))
               (custodian-shutdown-all main-custodian)
+              (sleep 1)
               (cond
                 [(eq? e 'kill) #f]
                 [(exn:bad-password? e) (on-fail e)]
@@ -51,10 +52,9 @@
       (case auth-result
         [(ok) #t]
         [(bad-password)
-         (raise (exn:bad-password (txt:bad-password)))]
+         (raise (exn:bad-password (txt:bad-password) (current-continuation-marks)))]
         [else
-         (raise-user-error 'connect
-                           auth-result)])
+         (raise-user-error 'connect auth-result)])
       (define (receive! %receivers id data [seen null])
         (match %receivers
           [(cons head rest)
@@ -76,7 +76,8 @@
             (set! n (if (n . > . 10000)  0 (add1 n)))
             n)))
       (define sender (thread-loop
-                      (match (thread-receive)
+                      (sync/timeout 10 (thread-receive-evt))
+                      (match (or (thread-try-receive) 'keepalive)
                         [(receiver _id return data)
                          (define id (or _id (next!)))
                          (thread-send dispatch (receiver id return data) #f)
@@ -89,9 +90,6 @@
           (thread-send reconnect #t)
           (custodian-shutdown-all main-custodian)]
          [else (thread-send dispatch (cons 'data data) #f)]))
-      (thread-loop
-       (sleep 10)
-       (thread-send sender 'keepalive #f))
       (set-connection-send-thread! result-connection sender)
       (set-connection-close! result-connection (λ () (custodian-shutdown-all main-custodian)))
       (on-connect result-connection)
