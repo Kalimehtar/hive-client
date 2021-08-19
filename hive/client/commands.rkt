@@ -4,13 +4,13 @@
          racket/file
          racket/tcp
          (prefix-in txt: "string-constants.rkt")
-         hive/common/read-write)
+         hive/common/read-write
+         "reciever.rkt"
+         (prefix-in recievers- "recievers.rkt"))
 
 (struct connection (send-thread close) #:mutable)
 
 (struct exn:bad-password exn:fail:user ())
-
-(struct receiver (id thread data) #:transparent)
 
 (define (connect tcp-port
                  on-event
@@ -30,9 +30,7 @@
                 [else
                  (on-fail e)
                  (connect tcp-port on-event on-connect on-fail username password result-connection)
-                 (for ([r (in-list receivers)])
-                   (when (receiver-data r)
-                     (thread-send (connection-send-thread result-connection) r)))]))))
+                 (recievers-resend receivers (connection-send-thread result-connection))]))))
   (define main-custodian (make-custodian))
   (define-syntax-rule (thread-loop BODY ...)
     (thread
@@ -41,7 +39,7 @@
          (let loop ()
            BODY ...
            (loop))))))
-  (define receivers (list (receiver #f (thread-loop (on-event (thread-receive))) #f)))
+  (define receivers (recievers-init (thread-loop (on-event (thread-receive)))))
   (parameterize ([current-custodian main-custodian])
     (with-handlers ([exn:fail? (λ (e)
                                  (thread-send reconnect e)
@@ -55,21 +53,12 @@
          (raise (exn:bad-password (txt:bad-password) (current-continuation-marks)))]
         [else
          (raise-user-error 'connect auth-result)])
-      (define (receive! %receivers id data [seen null])
-        (match %receivers
-          [(cons head rest)
-           (cond
-             [(eq? (receiver-id head) #f)
-              (thread-send (receiver-thread head) data)]
-             [(eqv? (receiver-id head) id)
-              (thread-send (receiver-thread head) data)
-              (set! receivers (append (reverse seen) rest))]
-             [else (receive! rest id data (cons head seen))])]))
       (define dispatch (thread-loop
                         (match (thread-receive)
-                          [(list-rest 'data id data) (receive! receivers id data)]
+                          [(list-rest 'data id data)
+                           (recievers-dispatch! receivers id data)]
                           [(cons 'data _) #f]
-                          [new-receiver (set! receivers (cons new-receiver receivers))])))
+                          [new-receiver (recievers-add! receivers new-receiver)])))
       (define next!
         (let ([n 0])
           (λ ()
@@ -87,8 +76,7 @@
        (define data (read/timeout in))
        (cond
          [(eof-object? data)
-          (thread-send reconnect #t)
-          (custodian-shutdown-all main-custodian)]
+          (thread-send reconnect #t)]
          [else (thread-send dispatch (cons 'data data) #f)]))
       (set-connection-send-thread! result-connection sender)
       (set-connection-close! result-connection (λ () (custodian-shutdown-all main-custodian)))
@@ -100,8 +88,8 @@
     (call-in-nested-thread
      (λ ()
        (with-handlers ([exn:fail? displayln])
-       (thread-send (connection-send-thread connection) (receiver #f (current-thread) data))
-       (thread-receive))))))
+         (thread-send (connection-send-thread connection) (receiver #f (current-thread) data))
+         (thread-receive))))))
 
 (define (do-command connection id . args)
   (talk connection (list* 'command id args)))
@@ -115,5 +103,6 @@
        (thread-running? (connection-send-thread connection))))
 
 (define (disconnect connection)
-  (and (connection-close connection)
-       (connection-close connection)))
+  (and connection
+       (connection-close connection)
+       ((connection-close connection))))
