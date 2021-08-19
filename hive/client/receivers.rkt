@@ -1,5 +1,5 @@
 #lang racket
-(require "reciever.rkt")
+(require "receiver.rkt")
 (provide (all-defined-out))
 
 (define (init default-thread)

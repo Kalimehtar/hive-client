@@ -5,8 +5,8 @@
          racket/tcp
          (prefix-in txt: "string-constants.rkt")
          hive/common/read-write
-         "reciever.rkt"
-         (prefix-in recievers- "recievers.rkt"))
+         "receiver.rkt"
+         (prefix-in receivers- "receivers.rkt"))
 
 (struct connection (send-thread close) #:mutable)
 
@@ -30,7 +30,7 @@
                 [else
                  (on-fail e)
                  (connect tcp-port on-event on-connect on-fail username password result-connection)
-                 (recievers-resend receivers (connection-send-thread result-connection))]))))
+                 (receivers-resend receivers (connection-send-thread result-connection))]))))
   (define main-custodian (make-custodian))
   (define-syntax-rule (thread-loop BODY ...)
     (thread
@@ -39,7 +39,7 @@
          (let loop ()
            BODY ...
            (loop))))))
-  (define receivers (recievers-init (thread-loop (on-event (thread-receive)))))
+  (define receivers (receivers-init (thread-loop (on-event (thread-receive)))))
   (parameterize ([current-custodian main-custodian])
     (with-handlers ([exn:fail? (λ (e)
                                  (thread-send reconnect e)
@@ -56,9 +56,9 @@
       (define dispatch (thread-loop
                         (match (thread-receive)
                           [(list-rest 'data id data)
-                           (recievers-dispatch! receivers id data)]
+                           (receivers-dispatch! receivers id data)]
                           [(cons 'data _) #f]
-                          [new-receiver (recievers-add! receivers new-receiver)])))
+                          [new-receiver (receivers-add! receivers new-receiver)])))
       (define next!
         (let ([n 0])
           (λ ()
