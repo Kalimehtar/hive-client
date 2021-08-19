@@ -1,7 +1,8 @@
-name: Racket Package CI
-  uses: jackfirth/racket-package-ci-action@v0.1.4
-  with:
-    # The name that the package should be given. This is used as the `--name` argument to `raco pkg install`.
-    name: hive-client
-    # The package's root directory, relative to the root of the repository. Should never include a leading slash. For example, a repository with foo-lib, foo-test, and foo-doc packages would use "foo-lib", "foo-test", or "foo-doc" to specify the input package directory. The default value, ".", is intended to be used with single-package repositories.
-    directory: # optional, default is .
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: jackfirth/racket-package-ci-action@v0.1.4
+      with:
+        name: hive-client
