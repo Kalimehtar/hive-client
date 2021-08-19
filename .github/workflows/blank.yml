@@ -1,5 +1,5 @@
 name: Racket Package CI
-  uses: jackfirth/racket-package-ci-action@v0.1.2
+  uses: jackfirth/racket-package-ci-action@v0.1.4
   with:
     # The name that the package should be given. This is used as the `--name` argument to `raco pkg install`.
     name: hive-client
