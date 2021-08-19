@@ -24,7 +24,9 @@
                                       (define select (send l get-selections))
                                       (unless (null? select)
                                         (set! current (send l get-data (car select)))
-                                        (send role set-value (symbol->string (user-role current)))))]))
+                                        (send role
+                                              set-value
+                                              (symbol->string (user-role current)))))]))
     (for ([n (in-range (length users))]
           [u (in-list users)])
       (send list-box set-data n u))
@@ -40,3 +42,5 @@
                       [label "Role"]
                       [init-value (symbol->string (user-role current))]))
     #f))
+
+(module test racket/base) ; gui

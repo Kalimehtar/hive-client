@@ -99,6 +99,9 @@
              [parent dialog]
              [callback (λ (b e)
                          (put-preferences '(server username password)
-                                          (map (λ (x)(send x get-value)) (list server username password)))
+                                          (map (λ (x)(send x get-value))
+                                               (list server username password)))
                          (send dialog show #f))])
         dialog))))
+
+(module test racket/base) ; gui
