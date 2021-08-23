@@ -52,7 +52,7 @@
         [(bad-password)
          (raise (exn:bad-password (txt:bad-password) (current-continuation-marks)))]
         [else
-         (raise-user-error 'connect auth-result)])
+         (raise-user-error 'connect "~a" auth-result)])
       (define dispatch (thread-loop
                         (match (thread-receive)
                           [(list-rest 'data id data)

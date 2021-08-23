@@ -19,7 +19,8 @@
     (init-field
      [port 1313]
      [on-event (λ (data) #t)]
-     [on-connect (λ (the-connection) #t)])
+     [on-connect (λ (the-connection) #t)]
+     [debug (λ (data) #t)])
     (super-new [label program-name] [width width] [height height])
 
     (inherit create-status-line set-status-text show)
@@ -45,7 +46,8 @@
              (send frame-settings show #t)]
             [(exn:fail:user? e)
              (message-box (txt:error) (exn-message e) this '(ok caution))
-             (send frame-settings show #t)]))
+             (send frame-settings show #t)]
+            [else (debug e)]))
         (set! the-connection
               (if user/pass
                   (connect port on-event on-connect on-fail (car user/pass) (cdr user/pass))
