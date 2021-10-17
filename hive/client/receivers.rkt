@@ -19,7 +19,7 @@
          [(eqv? (receiver-id head) id)
           (thread-send (receiver-thread head) data)
           (set-box! receivers (append (reverse seen) rest))]
-         [else (loop rest id data (cons head seen))])])))
+         [else (loop rest (cons head seen))])])))
 
 (define (add! receivers new)
   (set-box! receivers (cons new (unbox receivers))))
